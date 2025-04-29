@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recorrido del Carrito</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+      background-color: #f4f4f4;
+    }
+    h1 {
+      color: #333;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin: 20px auto;
+      max-width: 1200px;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .card h3 {
+      margin: 0 0 10px;
+      color: #555;
+    }
+    .card p {
+      font-size: 1.5em;
+      margin: 0;
+      color: #2196F3;
+    }
+    .path {
+      margin: 20px auto;
+      max-width: 600px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .canvas-container {
+      margin: 20px auto;
+      max-width: 400px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      background: #f0f0f0;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    a {
+      display: inline-block;
+      background-color: #2196F3;
+      color: white;
+      padding: 10px 20px;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 10px;
+    }
+    a:hover {
+      background-color: #1976D2;
+    }
+    #errorMsg {
+      color: red;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Recorrido del Carrito</h1>
+  <div class="dashboard">
+    <div class="card">
+      <h3>Temperatura (°C)</h3>
+      <p id="temperature">--</p>
+    </div>
+    <div class="card">
+      <h3>Humedad (%)</h3>
+      <p id="humidity">--</p>
+    </div>
+    <div class="card">
+      <h3>Aceleración X (m/s²)</h3>
+      <p id="accelX">--</p>
+    </div>
+    <div class="card">
+      <h3>Aceleración Y (m/s²)</h3>
+      <p id="accelY">--</p>
+    </div>
+    <div class="card">
+      <h3>Aceleración Z (m/s²)</h3>
+      <p id="accelX">--</p>
+    </div>
+    <div class="card">
+      <h3>Giro X (rad/s)</h3>
+      <p id="gyroX">--</p>
+    </div>
+    <div class="card">
+      <h3>Giro Y (rad/s)</h3>
+      <p id="gyroY">--</p>
+    </div>
+    <div class="card">
+      <h3>Giro Z (rad/s)</h3>
+      <p id="gyroZ">--</p>
+    </div>
+  </div>
+  <div class="path">
+    <pre id="pathLog"></pre>
+  </div>
+  <div class="canvas-container">
+    <canvas id="trajectoryCanvas" width="400" height="400"></canvas>
+  </div>
+  <button onclick="clearCanvas()">Limpiar Trayectoria</button>
+  <a href="/download">Descargar Movimientos</a>
+  <p id="errorMsg"></p>
+
+  <script>
+    const canvas = document.getElementById('trajectoryCanvas');
+    const ctx = canvas.getContext('2d');
+    let x = 200, y = 200, angle = -Math.PI / 2;
+    let lastPath = '';
+    let minX = 200, maxX = 200, minY = 200, maxY = 200;
+    const scaleFactor = 2; // Reducido para mapa más compacto
+
+    function drawTrajectory(movements) {
+      if (movements === lastPath) return;
+      const lines = movements.split('\n').filter(line => line && line.startsWith('MOVE:'));
+      const newLines = lines.slice(lastPath.split('\n').filter(l => l.startsWith('MOVE:')).length);
+      ctx.beginPath();
+      ctx.strokeStyle = '#2196F3';
+      ctx.lineWidth = 2;
+
+      for (const line of newLines) {
+        const parts = line.split(',');
+        if (parts.length < 2) continue;
+        const distMatch = parts[0].match(/DIST:([\d.]+)/);
+        const angleMatch = parts[1].match(/ANGLE:([-.\d]+)/);
+        if (!distMatch || !angleMatch) continue;
+
+        const distance = parseFloat(distMatch[1]);
+        const angleChange = parseFloat(angleMatch[1]);
+        angle += angleChange;
+
+        const newX = x + distance * scaleFactor * Math.cos(angle);
+        const newY = y + distance * scaleFactor * Math.sin(angle);
+
+        ctx.lineTo(newX, newY);
+        x = newX;
+        y = newY;
+
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+
+      const rangeX = maxX - minX;
+      const rangeY = maxY - minY;
+      const scale = Math.min(380 / rangeX, 380 / rangeY, 1);
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.translate(200, 200);
+      ctx.scale(scale, scale);
+      ctx.translate(-(minX + maxX) / 2, -(minY + maxY) / 2);
+      ctx.moveTo(200, 200);
+
+      x = 200;
+      y = 200;
+      angle = -Math.PI / 2;
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length < 2) continue;
+        const distMatch = parts[0].match(/DIST:([\d.]+)/);
+        const angleMatch = parts[1].match(/ANGLE:([-.\d]+)/);
+        if (!distMatch || !angleMatch) continue;
+
+        const distance = parseFloat(distMatch[1]);
+        const angleChange = parseFloat(angleMatch[1]);
+        angle += angleChange;
+
+        const newX = x + distance * scaleFactor * Math.cos(angle);
+        const newY = y + distance * scaleFactor * Math.sin(angle);
+        ctx.lineTo(newX, newY);
+        x = newX;
+        y = newY;
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      lastPath = movements;
+    }
+
+    function clearCanvas() {
+      fetch('/clear')
+        .then(response => response.text())
+        .then(data => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.beginPath();
+          ctx.moveTo(200, 200);
+          x = 200;
+          y = 200;
+          angle = -Math.PI / 2;
+          minX = 200;
+          maxX = 200;
+          minY = 200;
+          maxY = 200;
+          lastPath = '';
+          document.getElementById('pathLog').textContent = '';
+          document.getElementById('errorMsg').textContent = data;
+        })
+        .catch(error => {
+          document.getElementById('errorMsg').textContent = 'Error al limpiar datos';
+        });
+    }
+
+    function updateData() {
+      fetch('/data')
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById('pathLog').textContent = data.path;
+          document.getElementById('temperature').textContent = data.temperature.toFixed(1);
+          document.getElementById('humidity').textContent = data.humidity.toFixed(1);
+          document.getElementById('accelX').textContent = data.accelX.toFixed(2);
+          document.getElementById('accelY').textContent = data.accelY.toFixed(2);
+          document.getElementById('accelZ').textContent = data.accelZ.toFixed(2);
+          document.getElementById('gyroX').textContent = data.gyroX.toFixed(2);
+          document.getElementById('gyroY').textContent = data.gyroY.toFixed(2);
+          document.getElementById('gyroZ').textContent = data.gyroZ.toFixed(2);
+          drawTrajectory(data.path);
+          document.getElementById('errorMsg').textContent = '';
+        })
+        .catch(error => {
+          document.getElementById('errorMsg').textContent = 'Error al obtener datos';
+        });
+    }
+
+    setInterval(updateData, 500);
+    ctx.beginPath();
+    ctx.moveTo(200, 200);
+  </script>
+</body>
+</html>
