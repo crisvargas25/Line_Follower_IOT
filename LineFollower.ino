@@ -7,6 +7,8 @@
 #include <Adafruit_BMP085.h>
 #include <Wire.h>
 
+// Libraries for WiFi, web server, file system, and sensors (DHT11, MPU-6050, BMP180)
+
 // WiFi credentials
 const char* ssid = "LineFollowerCar";
 const char* password = "pass.123";
@@ -32,11 +34,15 @@ const char* password = "pass.123";
 #define BMP_SDA 18
 #define BMP_SCL 19
 
+// Pin definitions for infrared sensors, DHT11, motor control, and I2C communication for MPU-6050 and BMP180
+
 // PWM configuration
 const int freq = 1000;
 const int pwmChannelA = 0;
 const int pwmChannelB = 1;
 const int resolution = 8;
+
+// PWM settings for motor speed control (frequency, channels, and resolution)
 
 // PID parameters
 float Kp = 10.0;
@@ -45,14 +51,20 @@ float Kd = 5.0;
 float integral = 0;
 float lastError = 0;
 
+// PID control parameters for line-following algorithm
+
 // Motor speeds
 int baseSpeed = 80;
 int maxSpeed = 100;
+
+// Base and maximum motor speeds for movement
 
 // Sensor calibration
 int minIzq = 4095, maxIzq = 0;
 int minCen = 4095, maxCen = 0;
 int minDer = 4095, maxDer = 0;
+
+// Calibration variables to store min/max values for infrared sensors
 
 // Moving average filter
 const int filterSize = 5;
@@ -61,9 +73,13 @@ int cenBuffer[filterSize] = {0};
 int derBuffer[filterSize] = {0};
 int bufferIndex = 0;
 
+// Moving average filter to smooth infrared sensor readings
+
 // Path and sensor logs
 String movementLog = "INICIO\n";
 String sensorLog = "";
+
+// Strings to store movement and sensor data logs
 
 // Sensor objects
 DHT dht(DHT_PIN, DHT_TYPE);
@@ -72,16 +88,24 @@ Adafruit_BMP085 bmp;
 bool mpuInitialized = false;
 bool bmpInitialized = false;
 
+// Objects for DHT11, MPU-6050, and BMP180 sensors, with initialization flags
+
 // Two I2C buses
 TwoWire I2C_MPU = TwoWire(0);
 TwoWire I2C_BMP = TwoWire(1);
+
+// Separate I2C buses for MPU-6050 and BMP180 to avoid conflicts
 
 // Gyroscope drift correction
 float gyroZOffset = 0;
 const int calibrationSamples = 100;
 
+// Variables for gyroscope calibration to correct drift
+
 // Server
 AsyncWebServer server(80);
+
+// Asynchronous web server on port 80 for remote monitoring
 
 // Timing
 unsigned long lastLogTime = 0;
@@ -89,7 +113,10 @@ unsigned long lastSensorRead = 0;
 const long logInterval = 100; // Registro cada 100 ms
 const long sensorInterval = 5000; // Sensores cada 5s
 
+// Timing variables for logging movement and sensor data
+
 void calibrarSensores() {
+  // Calibrates infrared sensors by finding min/max values over 5 seconds
   Serial.println("Calibrando sensores infrarrojos...");
   unsigned long startTime = millis();
   while (millis() - startTime < 5000) {
@@ -117,6 +144,7 @@ void calibrarSensores() {
 }
 
 void calibrarGiroscopio() {
+  // Calibrates gyroscope by averaging Z-axis readings to correct drift
   if (!mpuInitialized) return;
   Serial.println("Calibrando giroscopio...");
   float sumGyroZ = 0;
@@ -131,6 +159,7 @@ void calibrarGiroscopio() {
 }
 
 void moverMotor(int velIzq, int velDer) {
+  // Controls motors by setting direction and PWM speed
   velIzq = constrain(velIzq, -maxSpeed, maxSpeed);
   velDer = constrain(velDer, -maxSpeed, maxSpeed);
   digitalWrite(IN1, velIzq >= 0 ? HIGH : LOW);
@@ -144,6 +173,7 @@ void moverMotor(int velIzq, int velDer) {
 }
 
 void logMovement(String movement) {
+  // Logs movement data to LittleFS and memory, keeping log size manageable
   unsigned long startTime = micros();
   File file = LittleFS.open("/movements.txt", "a");
   if (file) {
@@ -158,10 +188,12 @@ void logMovement(String movement) {
 }
 
 void logSensorData(String data) {
-  sensorLog = data; // Store only the latest sensor data
+  // Stores the latest sensor data in memory
+  sensorLog = data;
 }
 
 String escapeJson(String input) {
+  // Escapes special characters for JSON formatting
   String output = "";
   for (unsigned int i = 0; i < input.length(); i++) {
     char c = input[i];
@@ -178,6 +210,7 @@ String escapeJson(String input) {
 }
 
 void setup() {
+  // Initializes serial, file system, sensors, motors, WiFi, and web server
   Serial.begin(115200);
   Serial.println("Iniciando...");
 
@@ -242,10 +275,12 @@ void setup() {
   Serial.print("IP: "); Serial.println(WiFi.softAPIP());
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    // Serves the main webpage
     request->send(LittleFS, "/index.html", "text/html");
   });
 
   server.on("/data", HTTP_GET, [](AsyncWebServerRequest *request) {
+    // Sends sensor and movement data as JSON
     String json = "{\"movement\":\"" + escapeJson(movementLog) + "\",";
     unsigned long startTime = micros();
     float temp = dht.readTemperature();
@@ -280,10 +315,12 @@ void setup() {
   });
 
   server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
+    // Allows downloading the movement log file
     request->send(LittleFS, "/movements.txt", "text/plain", true);
   });
 
   server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request) {
+    // Clears logs and resets the movement file
     movementLog = "INICIO\n";
     sensorLog = "";
     File file = LittleFS.open("/movements.txt", "w");
@@ -304,12 +341,15 @@ void setup() {
 }
 
 void loop() {
+  // Main loop: reads sensors, applies PID control, logs data, and controls motors
   unsigned long startLoop = micros();
 
+  // Read infrared sensors
   int valIzq = analogRead(SENSOR_IZQ);
   int valCen = analogRead(SENSOR_CEN);
   int valDer = analogRead(SENSOR_DER);
 
+  // Apply moving average filter
   izqBuffer[bufferIndex] = valIzq;
   cenBuffer[bufferIndex] = valCen;
   derBuffer[bufferIndex] = valDer;
@@ -325,10 +365,12 @@ void loop() {
   valCen = sumCen / filterSize;
   valDer = sumDer / filterSize;
 
+  // Normalize sensor values
   int normIzq = map(valIzq, minIzq, maxIzq, 1000, 0);
   int normCen = map(valCen, minCen, maxCen, 1000, 0);
   int normDer = map(valDer, minDer, maxDer, 1000, 0);
 
+  // PID control for line following
   float error = normDer - normIzq;
   integral += error;
   if (abs(integral) > 1000) integral = 0;
@@ -341,6 +383,7 @@ void loop() {
   velIzq = constrain(velIzq, 0, maxSpeed);
   velDer = constrain(velDer, 0, maxSpeed);
 
+  // Read gyroscope for angle tracking
   unsigned long currentTime = millis();
   float gyroZ = 0;
   if (mpuInitialized) {
@@ -349,11 +392,12 @@ void loop() {
     gyroZ = (g.gyro.z - gyroZOffset) * 3;
   }
 
+  // Calculate distance and angle change
   float timeDelta = (currentTime - lastLogTime) / 1000.0;
   float distance = baseSpeed * timeDelta * 0.03;
   float angleChange = gyroZ * timeDelta;
 
-  // In the loop function, replace the movement logging section with this:
+  // Log movement data every 100ms
   if (currentTime - lastLogTime >= logInterval) {
     String movement = "MOVE:DIST:" + String(distance, 2) + ",ANGLE:" + String(angleChange, 2);
     logMovement(movement);
@@ -374,6 +418,7 @@ void loop() {
     lastLogTime = currentTime;
   }
 
+  // Log sensor data every 5 seconds
   if (currentTime - lastSensorRead >= sensorInterval) {
     float temp = dht.readTemperature();
     float hum = dht.readHumidity();
@@ -395,7 +440,9 @@ void loop() {
     lastSensorRead = currentTime;
   }
 
+  // Apply motor speeds
   moverMotor(velIzq, velDer);
 
+  // Log loop execution time
   Serial.print("Tiempo loop: "); Serial.print(micros() - startLoop); Serial.println(" us");
 }
