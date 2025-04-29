@@ -61,8 +61,9 @@ int cenBuffer[filterSize] = {0};
 int derBuffer[filterSize] = {0};
 int bufferIndex = 0;
 
-// Path log
-String pathLog = "INICIO\n";
+// Path and sensor logs
+String movementLog = "INICIO\n";
+String sensorLog = "";
 
 // Sensor objects
 DHT dht(DHT_PIN, DHT_TYPE);
@@ -149,11 +150,15 @@ void logMovement(String movement) {
     file.println(movement);
     file.close();
   }
-  pathLog += movement + "\n";
-  if (pathLog.length() > 5000) {
-    pathLog = pathLog.substring(pathLog.length() - 5000);
+  movementLog += movement + "\n";
+  if (movementLog.length() > 5000) {
+    movementLog = movementLog.substring(movementLog.length() - 5000);
   }
   Serial.print("Tiempo escritura LittleFS: "); Serial.print(micros() - startTime); Serial.println(" us");
+}
+
+void logSensorData(String data) {
+  sensorLog = data; // Store only the latest sensor data
 }
 
 String escapeJson(String input) {
@@ -191,7 +196,6 @@ void setup() {
   dht.begin();
   Serial.println("DHT11 inicializado");
 
-  // Inicializar I2C para MPU-6050 (GPIO 21, 22)
   I2C_MPU.begin(MPU_SDA, MPU_SCL, 100000);
   if (!mpu.begin(0x68, &I2C_MPU)) {
     Serial.println("No se pudo inicializar MPU-6050");
@@ -205,7 +209,6 @@ void setup() {
     calibrarGiroscopio();
   }
 
-  // Inicializar I2C para BMP180 (GPIO 18, 19)
   I2C_BMP.begin(BMP_SDA, BMP_SCL, 100000);
   if (!bmp.begin(0, &I2C_BMP)) {
     Serial.println("No se pudo inicializar BMP180");
@@ -243,16 +246,16 @@ void setup() {
   });
 
   server.on("/data", HTTP_GET, [](AsyncWebServerRequest *request) {
-    String json = "{\"path\":\"" + escapeJson(pathLog) + "\",";
+    String json = "{\"movement\":\"" + escapeJson(movementLog) + "\",";
     unsigned long startTime = micros();
     float temp = dht.readTemperature();
     float hum = dht.readHumidity();
-    json += "\"temperature\":" + String(temp) + ",";
-    json += "\"humidity\":" + String(hum) + ",";
+    json += "\"temperature\":" + String(temp, 1) + ",";
+    json += "\"humidity\":" + String(hum, 1) + ",";
     Serial.print("Tiempo lectura DHT11: "); Serial.print(micros() - startTime); Serial.println(" us");
     if (bmpInitialized) {
       startTime = micros();
-      float pressure = bmp.readPressure() / 100.0; // Convertir Pa a hPa
+      float pressure = bmp.readPressure() / 100.0;
       json += "\"pressure\":" + String(pressure, 1) + ",";
       Serial.print("Tiempo lectura BMP180: "); Serial.print(micros() - startTime); Serial.println(" us");
     } else {
@@ -263,12 +266,12 @@ void setup() {
       startTime = micros();
       mpu.getEvent(&a, &g, &temp_mpu);
       Serial.print("Tiempo lectura MPU-6050: "); Serial.print(micros() - startTime); Serial.println(" us");
-      json += "\"accelX\":" + String(a.acceleration.x) + ",";
-      json += "\"accelY\":" + String(a.acceleration.y) + ",";
-      json += "\"accelZ\":" + String(a.acceleration.z) + ",";
-      json += "\"gyroX\":" + String(g.gyro.x) + ",";
-      json += "\"gyroY\":" + String(g.gyro.y) + ",";
-      json += "\"gyroZ\":" + String(g.gyro.z);
+      json += "\"accelX\":" + String(a.acceleration.x, 2) + ",";
+      json += "\"accelY\":" + String(a.acceleration.y, 2) + ",";
+      json += "\"accelZ\":" + String(a.acceleration.z, 2) + ",";
+      json += "\"gyroX\":" + String(g.gyro.x, 2) + ",";
+      json += "\"gyroY\":" + String(g.gyro.y, 2) + ",";
+      json += "\"gyroZ\":" + String(g.gyro.z - gyroZOffset, 2);
     } else {
       json += "\"accelX\":0,\"accelY\":0,\"accelZ\":0,\"gyroX\":0,\"gyroY\":0,\"gyroZ\":0";
     }
@@ -281,7 +284,8 @@ void setup() {
   });
 
   server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request) {
-    pathLog = "INICIO\n";
+    movementLog = "INICIO\n";
+    sensorLog = "";
     File file = LittleFS.open("/movements.txt", "w");
     if (file) {
       file.println("INICIO");
@@ -342,13 +346,14 @@ void loop() {
   if (mpuInitialized) {
     sensors_event_t a, g, temp_mpu;
     mpu.getEvent(&a, &g, &temp_mpu);
-    gyroZ = (g.gyro.z - gyroZOffset) * 1.2; // Amplificar giros
+    gyroZ = (g.gyro.z - gyroZOffset) * 3;
   }
 
-  float timeDelta = (currentTime - lastLogTime) / 1000.0; // En segundos
-  float distance = baseSpeed * timeDelta * 0.03; // Reducido para menor escala
+  float timeDelta = (currentTime - lastLogTime) / 1000.0;
+  float distance = baseSpeed * timeDelta * 0.03;
   float angleChange = gyroZ * timeDelta;
 
+  // In the loop function, replace the movement logging section with this:
   if (currentTime - lastLogTime >= logInterval) {
     String movement = "MOVE:DIST:" + String(distance, 2) + ",ANGLE:" + String(angleChange, 2);
     logMovement(movement);
@@ -359,12 +364,13 @@ void loop() {
     Serial.print("Norm Izq: "); Serial.print(normIzq);
     Serial.print(" | Norm Cen: "); Serial.print(normCen);
     Serial.print(" | Norm Der: "); Serial.println(normDer);
-    Serial.print("Error: "); Serial.println(error);
-    Serial.print("Correction: "); Serial.println(correction);
+    Serial.print("Error: "); Serial.print(error);
+    Serial.print(" | Correction: "); Serial.println(correction);
     Serial.print("Vel Izq: "); Serial.print(velIzq);
     Serial.print(" | Vel Der: "); Serial.println(velDer);
     Serial.print("Distancia: "); Serial.print(distance); Serial.print(" cm");
-    Serial.print(" | Ángulo: "); Serial.print(angleChange); Serial.println(" rad");
+    Serial.print(" | GyroZ: "); Serial.print(gyroZ, 4); Serial.print(" rad/s");
+    Serial.print(" | AngleChange: "); Serial.print(angleChange, 4); Serial.println(" rad");
     lastLogTime = currentTime;
   }
 
@@ -372,20 +378,20 @@ void loop() {
     float temp = dht.readTemperature();
     float hum = dht.readHumidity();
     float pressure = bmpInitialized ? bmp.readPressure() / 100.0 : 0;
-    String sensorData = "TEMP:" + String(temp) + ",HUM:" + String(hum) + ",PRES:" + String(pressure, 1);
+    String sensorData = "TEMP:" + String(temp, 1) + ",HUM:" + String(hum, 1) + ",PRES:" + String(pressure, 1);
     if (mpuInitialized) {
       sensors_event_t a, g, temp_mpu;
       mpu.getEvent(&a, &g, &temp_mpu);
-      sensorData += ",ACCX:" + String(a.acceleration.x) + 
-                    ",ACCY:" + String(a.acceleration.y) + 
-                    ",ACCZ:" + String(a.acceleration.z) + 
-                    ",GYRX:" + String(g.gyro.x) + 
-                    ",GYRY:" + String(g.gyro.y) + 
-                    ",GYRZ:" + String(g.gyro.z);
+      sensorData += ",ACCX:" + String(a.acceleration.x, 2) + 
+                    ",ACCY:" + String(a.acceleration.y, 2) + 
+                    ",ACCZ:" + String(a.acceleration.z, 2) + 
+                    ",GYRX:" + String(g.gyro.x, 2) + 
+                    ",GYRY:" + String(g.gyro.y, 2) + 
+                    ",GYRZ:" + String(g.gyro.z - gyroZOffset, 2);
     } else {
       sensorData += ",ACCX:0,ACCY:0,ACCZ:0,GYRX:0,GYRY:0,GYRZ:0";
     }
-    logMovement(sensorData);
+    logSensorData(sensorData);
     lastSensorRead = currentTime;
   }
 
