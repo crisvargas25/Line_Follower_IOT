@@ -97,6 +97,10 @@
       <p id="humidity">--</p>
     </div>
     <div class="card">
+      <h3>Presión (hPa)</h3>
+      <p id="pressure">--</p>
+    </div>
+    <div class="card">
       <h3>Aceleración X (m/s²)</h3>
       <p id="accelX">--</p>
     </div>
@@ -106,7 +110,7 @@
     </div>
     <div class="card">
       <h3>Aceleración Z (m/s²)</h3>
-      <p id="accelX">--</p>
+      <p id="accelZ">--</p>
     </div>
     <div class="card">
       <h3>Giro X (rad/s)</h3>
@@ -137,7 +141,7 @@
     let x = 200, y = 200, angle = -Math.PI / 2;
     let lastPath = '';
     let minX = 200, maxX = 200, minY = 200, maxY = 200;
-    const scaleFactor = 2; // Reducido para mapa más compacto
+    const scaleFactor = 3; // Reducido para mapa más compacto
 
     function drawTrajectory(movements) {
       if (movements === lastPath) return;
@@ -238,6 +242,7 @@
           document.getElementById('pathLog').textContent = data.path;
           document.getElementById('temperature').textContent = data.temperature.toFixed(1);
           document.getElementById('humidity').textContent = data.humidity.toFixed(1);
+          document.getElementById('pressure').textContent = data.pressure.toFixed(1);
           document.getElementById('accelX').textContent = data.accelX.toFixed(2);
           document.getElementById('accelY').textContent = data.accelY.toFixed(2);
           document.getElementById('accelZ').textContent = data.accelZ.toFixed(2);
