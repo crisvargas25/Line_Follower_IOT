@@ -3,241 +3,244 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard del Carrito</title>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <title>Control de Sensores</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: 'Orbitron', sans-serif;
+    * {
       margin: 0;
-      padding: 20px;
-      background: linear-gradient(135deg, #1a1a1a 0%, #2c003e 100%);
-      color: #e0e0e0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0a0a0a;
+      color: #ffffff;
       min-height: 100vh;
       display: flex;
-      flex-direction: column;
+      justify-content: center;
       align-items: center;
+      overflow-x: hidden;
     }
-    h1 {
-      text-align: center;
-      color: #00e6ff;
-      text-shadow: 0 0 10px #00e6ff;
-      margin-bottom: 20px;
-      font-size: 2em;
-    }
-    #dashboard {
-      background: #0d0d0d;
+    .container {
+      max-width: 1400px;
+      width: 100%;
       padding: 20px;
-      border: 2px solid transparent;
-      border-image: linear-gradient(to bottom, #00e6ff, #8b00ff) 1;
-      border-radius: 12px;
-      box-shadow: 0 0 15px rgba(0, 230, 255, 0.5), 0 0 30px rgba(139, 0, 255, 0.3);
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 15px;
-      max-width: 1200px;
-      width: 100%;
-    }
-    .sensor-box {
-      background: #1c1c1c;
-      padding: 15px;
-      border: 2px solid transparent;
-      border-image: linear-gradient(to bottom, #00e6ff, #8b00ff) 1;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 230, 255, 0.3);
-      color: #e0e0e0;
-      text-align: left;
-    }
-    .sensor-box h3 {
-      margin: 0 0 10px;
-      color: #00e6ff;
-      text-shadow: 0 0 5px #00e6ff;
-      font-size: 1.2em;
-    }
-    .sensor-box p {
-      margin: 5px 0;
-      font-size: 0.9em;
-    }
-    .path {
-      background: #1c1c1c;
-      padding: 15px;
-      border: 2px solid transparent;
-      border-image: linear-gradient(to bottom, #00e6ff, #8b00ff) 1;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 230, 255, 0.3);
-      max-height: 200px;
-      overflow-y: auto;
-      color: #e0e0e0;
-      grid-column: 2;
-      grid-row: 1 / 3;
-    }
-    .canvas-container {
-      background: #1c1c1c;
-      padding: 10px;
-      border: 2px solid transparent;
-      border-image: linear-gradient(to bottom, #00e6ff, #8b00ff) 1;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0, 230, 255, 0.3);
-      grid-column: 3;
-      grid-row: 1;
-    }
-    canvas {
-      border: 1px solid #00e6ff;
-      background: #2c2c2c;
-      border-radius: 4px;
-      width: 100%;
-      height: auto;
-    }
-    #ambiente-box { grid-column: 1; grid-row: 1; }
-    #giroscopio-box { grid-column: 1; grid-row: 2; }
-    #acelerometro-box { grid-column: 3; grid-row: 2; }
-    .button-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      margin-top: 20px;
-      gap: 10px;
-      max-width: 1200px;
+      gap: 20px;
+    }
+    .header {
+      text-align: center;
+      padding: 20px;
+    }
+    .header h1 {
+      font-size: 2.5rem;
+      font-weight: 600;
+      background: linear-gradient(90deg, #00ff88, #00ccff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .dashboard {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
       width: 100%;
     }
-    button, a {
-      background: linear-gradient(45deg, #00e6ff, #8b00ff);
+    .sensor-card {
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 20px;
+      width: 300px;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .sensor-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, #00ff88, #00ccff);
+      opacity: 0.7;
+    }
+    .sensor-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 255, 136, 0.2);
+    }
+    .sensor-card h3 {
+      font-size: 1.2rem;
+      font-weight: 400;
+      color: #00ff88;
+      margin-bottom: 15px;
+    }
+    .sensor-card p {
+      font-size: 1.5rem;
+      font-weight: 600;
       color: #ffffff;
+      margin: 5px 0;
+    }
+    .sensor-card span {
+      font-size: 0.9rem;
+      color: #aaaaaa;
+    }
+    .canvas-container {
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 20px;
+      width: 400px;
+      height: 400px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+    canvas {
+      border-radius: 8px;
+      background: #0f0f0f;
+    }
+    .controls {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      background: linear-gradient(90deg, #00ff88, #00ccff);
+      color: #0a0a0a;
       padding: 12px 24px;
       border: none;
       border-radius: 8px;
       cursor: pointer;
-      text-decoration: none;
-      transition: transform 0.2s, box-shadow 0.2s;
-      width: 200px;
-      text-align: center;
-      font-size: 0.9em;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
     }
-    button:hover, a:hover {
-      transform: scale(1.05);
-      box-shadow: 0 0 20px rgba(0, 230, 255, 0.7);
+    .btn:hover {
+      background: linear-gradient(90deg, #00ccff, #00ff88);
+      box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
     }
     #errorMsg {
-      color: #ff5555;
-      text-shadow: 0 0 5px #ff5555;
-      margin-top: 10px;
+      color: #ff4d4d;
+      font-size: 0.9rem;
       text-align: center;
-      font-size: 0.9em;
+      margin-top: 10px;
     }
-    /* Responsividad */
-    @media (max-width: 900px) {
-      #dashboard {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      .path {
-        grid-column: 1 / 3;
-        grid-row: 3;
-      }
-      .canvas-container {
-        grid-column: 1 / 3;
-        grid-row: 1;
-      }
-      #ambiente-box { grid-column: 1; grid-row: 2; }
-      #giroscopio-box { grid-column: 2; grid-row: 2; }
-      #acelerometro-box { grid-column: 1 / 3; grid-row: 4; }
-      h1 { font-size: 1.8em; }
-      .sensor-box h3 { font-size: 1.1em; }
-      .sensor-box p { font-size: 0.85em; }
-      button, a { width: 180px; }
-    }
-    @media (max-width: 600px) {
-      body { padding: 10px; }
-      #dashboard {
-        grid-template-columns: 1fr;
+    @media (max-width: 768px) {
+      .container {
         padding: 15px;
       }
-      .path, .canvas-container, .sensor-box {
-        grid-column: 1;
-        grid-row: auto;
+      .header h1 {
+        font-size: 2rem;
       }
-      canvas {
-        width: 300px;
-        height: 300px;
+      .sensor-card {
+        width: 100%;
+        max-width: 350px;
       }
-      h1 { font-size: 1.5em; }
-      .sensor-box h3 { font-size: 1em; }
-      .sensor-box p { font-size: 0.8em; }
-      .path { max-height: 150px; }
-      button, a { width: 160px; font-size: 0.85em; }
+      .canvas-container {
+        width: 100%;
+        max-width: 350px;
+        height: 350px;
+      }
+    }
+    @media (max-width: 480px) {
+      .header h1 {
+        font-size: 1.5rem;
+      }
+      .sensor-card {
+        padding: 15px;
+      }
+      .sensor-card h3 {
+        font-size: 1rem;
+      }
+      .sensor-card p {
+        font-size: 1.2rem;
+      }
+      .btn {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>Dashboard del Carrito</h1>
-  
-  <div id="dashboard">
-    <div id="ambiente-box" class="sensor-box">
-      <h3>Ambiente</h3>
-      <p>Presión: <span id="presion">1013 hPa</span></p>
-      <p>Humedad: <span id="humedad">60%</span></p>
-      <p>Temperatura: <span id="temperatura">25°C</span></p>
+  <div class="container">
+    <div class="header">
+      <h1>Control de Sensores</h1>
     </div>
-    
-    <div id="giroscopio-box" class="sensor-box">
-      <h3>Giroscopio</h3>
-      <p>X: <span id="giroX">0.00 rad/s</span></p>
-      <p>Y: <span id="giroY">0.00 rad/s</span></p>
-      <p>Z: <span id="giroZ">0.00 rad/s</span></p>
+    <div class="dashboard">
+      <div class="sensor-card">
+        <h3>Ambiente</h3>
+        <p>Presión: <span id="presion">1013 hPa</span></p>
+        <p>Humedad: <span id="humedad">60%</span></p>
+        <p>Temperatura: <span id="temperatura">25°C</span></p>
+      </div>
+      <div class="sensor-card">
+        <h3>Giroscopio</h3>
+        <p>X: <span id="giroX">0.00 rad/s</span></p>
+        <p>Y: <span id="giroY">0.00 rad/s</span></p>
+        <p>Z: <span id="giroZ">0.00 rad/s</span></p>
+      </div>
+      <div class="sensor-card">
+        <h3>Acelerómetro</h3>
+        <p>X: <span id="accelX">0.00 m/s²</span></p>
+        <p>Y: <span id="accelY">0.00 m/s²</span></p>
+        <p>Z: <span id="accelZ">9.81 m/s²</span></p>
+      </div>
+      <div class="canvas-container">
+        <canvas id="trajectoryCanvas" width="350" height="350"></canvas>
+      </div>
     </div>
-    
-    <div id="acelerometro-box" class="sensor-box">
-      <h3>Acelerómetro</h3>
-      <p>X: <span id="accelX">0.00 m/s²</span></p>
-      <p>Y: <span id="accelY">0.00 m/s²</span></p>
-      <p>Z: <span id="accelZ">9.81 m/s²</span></p>
+    <div class="controls">
+      <button class="btn" onclick="clearCanvas()">Limpiar Trayectoria</button>
+      <a class="btn" href="/download">Descargar Datos</a>
     </div>
-    
-    <div class="path">
-      <pre id="pathLog"></pre>
-    </div>
-    
-    <div class="canvas-container">
-      <canvas id="trajectoryCanvas" width="400" height="400"></canvas>
-    </div>
+    <p id="errorMsg"></p>
   </div>
-  
-  <div class="button-container">
-    <button onclick="clearCanvas()">Limpiar Trayectoria</button>
-    <a href="/download">Descargar Movimientos</a>
-  </div>
-  
-  <p id="errorMsg"></p>
 
   <script>
     const canvas = document.getElementById('trajectoryCanvas');
     const ctx = canvas.getContext('2d');
-    let x = 200, y = 200, angle = -Math.PI / 2;
-    let lastPath = '';
-    const stepSize = 5;
-    const angleStep = Math.PI / 6;
+    let x = 175, y = 175, angle = -Math.PI / 2;
+    const scale = 10; // Scale factor for distance (pixels per cm)
+    let lastMovement = ''; // Track last processed movement to avoid redrawing
 
     function drawTrajectory(movements) {
-      if (movements === lastPath) return;
+      if (movements === lastMovement) return; // Skip if no new data
       const lines = movements.split('\n').filter(line => line && line !== 'INICIO');
-      const newLines = lines.slice(lastPath.split('\n').filter(l => l && l !== 'INICIO').length);
+      const newLines = lastMovement ? lines.slice(lastMovement.split('\n').filter(l => l && l !== 'INICIO').length) : lines;
+
       ctx.beginPath();
-      ctx.strokeStyle = '#00e6ff';
+      ctx.strokeStyle = '#00ff88';
       ctx.lineWidth = 2;
+      ctx.moveTo(x, y);
 
       for (const movement of newLines) {
-        if (movement === 'ADELANTE') {
-          const newX = x + stepSize * Math.cos(angle);
-          const newY = y + stepSize * Math.sin(angle);
-          ctx.lineTo(newX, newY);
-          x = newX;
-          y = newY;
-        } else if (movement === 'IZQUIERDA') {
-          angle += angleStep;
-        } else if (movement === 'DERECHA') {
-          angle -= angleStep;
+        if (movement.startsWith('MOVE:DIST:')) {
+          const parts = movement.split(',');
+          const distMatch = parts[0].match(/DIST:([-]?[\d.]+)/);
+          const angleMatch = parts[1].match(/ANGLE:([-]?[\d.]+)/);
+          if (distMatch && angleMatch) {
+            const distance = parseFloat(distMatch[1]);
+            const angleChange = parseFloat(angleMatch[1]);
+            console.log(`Drawing: DIST=${distance}, ANGLE=${angleChange}, Current Angle=${angle}`);
+            angle += angleChange;
+            const newX = x + distance * scale * Math.cos(angle);
+            const newY = y + distance * scale * Math.sin(angle);
+            ctx.lineTo(newX, newY);
+            x = newX;
+            y = newY;
+          } else {
+            console.warn(`Invalid movement format: ${movement}`);
+          }
         }
       }
       ctx.stroke();
-      lastPath = movements;
+      lastMovement = movements; // Update last processed movement
     }
 
     function clearCanvas() {
@@ -245,13 +248,10 @@
         .then(response => response.text())
         .then(data => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.beginPath();
-          ctx.moveTo(200, 200);
-          x = 200;
-          y = 200;
+          x = 175;
+          y = 175;
           angle = -Math.PI / 2;
-          lastPath = '';
-          document.getElementById('pathLog').textContent = '';
+          lastMovement = '';
           document.getElementById('errorMsg').textContent = data;
         })
         .catch(error => {
@@ -263,28 +263,27 @@
       fetch('/data')
         .then(response => response.json())
         .then(data => {
-          document.getElementById('pathLog').textContent = data.path;
-          drawTrajectory(data.path);
+          drawTrajectory(data.movement);
           document.getElementById('errorMsg').textContent = '';
-          // Placeholder: actualizar valores de sensores
-          document.getElementById('presion').textContent = '1013 hPa';
-          document.getElementById('humedad').textContent = '60%';
-          document.getElementById('temperatura').textContent = '25°C';
-          document.getElementById('giroX').textContent = '0.00 rad/s';
-          document.getElementById('giroY').textContent = '0.00 rad/s';
-          document.getElementById('giroZ').textContent = '0.00 rad/s';
-          document.getElementById('accelX').textContent = '0.00 m/s²';
-          document.getElementById('accelY').textContent = '0.00 m/s²';
-          document.getElementById('accelZ').textContent = '9.81 m/s²';
+          document.getElementById('presion').textContent = data.pressure.toFixed(1) + ' hPa';
+          document.getElementById('humedad').textContent = data.humidity.toFixed(1) + '%';
+          document.getElementById('temperatura').textContent = data.temperature.toFixed(1) + '°C';
+          document.getElementById('giroX').textContent = data.gyroX.toFixed(2) + ' rad/s';
+          document.getElementById('giroY').textContent = data.gyroY.toFixed(2) + ' rad/s';
+          document.getElementById('giroZ').textContent = data.gyroZ.toFixed(2) + ' rad/s';
+          document.getElementById('accelX').textContent = data.accelX.toFixed(2) + ' m/s²';
+          document.getElementById('accelY').textContent = data.accelY.toFixed(2) + ' m/s²';
+          document.getElementById('accelZ').textContent = data.accelZ.toFixed(2) + ' m/s²';
         })
         .catch(error => {
           document.getElementById('errorMsg').textContent = 'Error al obtener datos';
+          console.error('Fetch error:', error);
         });
     }
 
     setInterval(updateData, 500);
     ctx.beginPath();
-    ctx.moveTo(200, 200);
+    ctx.moveTo(175, 175);
   </script>
 </body>
 </html>
