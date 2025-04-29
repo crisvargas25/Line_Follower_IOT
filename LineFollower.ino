@@ -1,448 +1,142 @@
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include <LittleFS.h>
-#include <DHT.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BMP085.h>
-#include <Wire.h>
+// Pines sensores
+#define SENSOR_IZQ 34     // Pin analógico del sensor izquierdo
+#define SENSOR_CEN 36     // Pin analógico del sensor central
+#define SENSOR_DER 35     // Pin analógico del sensor derecho
 
-// Libraries for WiFi, web server, file system, and sensors (DHT11, MPU-6050, BMP180)
+// Pines motores
+#define ENA 25            // Pin de PWM para motor izquierdo
+#define IN1 26            // Dirección 1 del motor izquierdo
+#define IN2 27            // Dirección 2 del motor izquierdo
 
-// WiFi credentials
-const char* ssid = "LineFollowerCar";
-const char* password = "pass.123";
+#define ENB 32            // Pin de PWM para motor derecho
+#define IN3 33            // Dirección 1 del motor derecho
+#define IN4 14            // Dirección 2 del motor derecho
 
-// Sensor pins
-#define SENSOR_IZQ 34
-#define SENSOR_CEN 36
-#define SENSOR_DER 35
-#define DHT_PIN 4
-#define DHT_TYPE DHT11
+// PWM  
+#define CH_A 0            // Canal PWM para el motor izquierdo
+#define CH_B 1            // Canal PWM para el motor derecho
 
-// Motor pins
-#define ENA 25
-#define IN1 26
-#define IN2 27
-#define ENB 32
-#define IN3 33
-#define IN4 14
+// Variables sensores para calibración
+int minIzq = 4095, maxIzq = 0; // Valores extremos para normalizar sensor izquierdo
+int minCen = 4095, maxCen = 0; // Valores extremos para normalizar sensor central
+int minDer = 4095, maxDer = 0; // Valores extremos para normalizar sensor derecho
 
-// I2C pins
-#define MPU_SDA 21
-#define MPU_SCL 22
-#define BMP_SDA 18
-#define BMP_SCL 19
+// Constantes y variables del controlador PID
+float Kp = 10;                 // Ganancia proporcional
+float Ki = 0;                  // Ganancia integral (no usada en este caso)
+float Kd = 4;                  // Ganancia derivativa
+float error = 0;               // Error actual
+float integral = 0;           // Integral acumulada del error
+float lastError = 0;          // Error del ciclo anterior
 
-// Pin definitions for infrared sensors, DHT11, motor control, and I2C communication for MPU-6050 and BMP180
+// Velocidades base y máxima de los motores
+int baseSpeed = 70;           // Velocidad base del robot
+int maxSpeed = 100;           // Velocidad máxima permitida
 
-// PWM configuration
-const int freq = 1000;
-const int pwmChannelA = 0;
-const int pwmChannelB = 1;
-const int resolution = 8;
+void setup() {
+  Serial.begin(115200);       // Inicializa la comunicación serial
 
-// PWM settings for motor speed control (frequency, channels, and resolution)
+  // Configura los pines de sensores como entrada
+  pinMode(SENSOR_IZQ, INPUT);
+  pinMode(SENSOR_CEN, INPUT);
+  pinMode(SENSOR_DER, INPUT);
 
-// PID parameters
-float Kp = 10.0;
-float Ki = 0.005;
-float Kd = 5.0;
-float integral = 0;
-float lastError = 0;
+  // Configura los pines de dirección de los motores como salida
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
 
-// PID control parameters for line-following algorithm
+  // Configura los canales PWM con frecuencia de 1kHz y resolución de 8 bits
+  ledcSetup(CH_A, 1000, 8);         // Canal A
+  ledcAttachPin(ENA, CH_A);        // Asocia ENA al canal A
 
-// Motor speeds
-int baseSpeed = 80;
-int maxSpeed = 100;
+  ledcSetup(CH_B, 1000, 8);         // Canal B
+  ledcAttachPin(ENB, CH_B);         // Asocia ENB al canal B
 
-// Base and maximum motor speeds for movement
+  // Calibración de sensores durante 5 segundos
+  Serial.println("🔧 Calibrando sensores (5 segundos)...");
+  calibrarSensores();
+  Serial.println("✅ Calibración completa.");
+}
 
-// Sensor calibration
-int minIzq = 4095, maxIzq = 0;
-int minCen = 4095, maxCen = 0;
-int minDer = 4095, maxDer = 0;
+void loop() {
+  // Lecturas analógicas de los sensores
+  int valIzq = analogRead(SENSOR_IZQ);
+  int valCen = analogRead(SENSOR_CEN);
+  int valDer = analogRead(SENSOR_DER);
 
-// Calibration variables to store min/max values for infrared sensors
+  // Normalización de los valores (0 a 1000)
+  int normIzq = map(valIzq, minIzq, maxIzq, 1000, 0);
+  int normCen = map(valCen, minCen, maxCen, 1000, 0);
+  int normDer = map(valDer, minDer, maxDer, 1000, 0);
 
-// Moving average filter
-const int filterSize = 5;
-int izqBuffer[filterSize] = {0};
-int cenBuffer[filterSize] = {0};
-int derBuffer[filterSize] = {0};
-int bufferIndex = 0;
+  // Cálculo del error ponderado con los tres sensores
+  // El sensor central tiene peso 0 porque debería estar centrado en la línea
+  // Los sensores izquierdo y derecho determinan la desviación
+  error = (normDer - normIzq) + 0.5 * (normDer + normIzq - 2 * normCen);
 
-// Moving average filter to smooth infrared sensor readings
+  // Cálculo del término integral y derivativo
+  integral += error;
+  float derivative = error - lastError;
 
-// Path and sensor logs
-String movementLog = "INICIO\n";
-String sensorLog = "";
+  // Cálculo de la corrección PID
+  float correction = Kp * error + Ki * integral + Kd * derivative;
 
-// Strings to store movement and sensor data logs
+  // Almacena el error actual para el siguiente ciclo
+  lastError = error;
 
-// Sensor objects
-DHT dht(DHT_PIN, DHT_TYPE);
-Adafruit_MPU6050 mpu;
-Adafruit_BMP085 bmp;
-bool mpuInitialized = false;
-bool bmpInitialized = false;
+  // Calcula la velocidad corregida para cada motor
+  int velIzq = baseSpeed - correction;
+  int velDer = baseSpeed + correction;
 
-// Objects for DHT11, MPU-6050, and BMP180 sensors, with initialization flags
+  // Limita las velocidades a los valores permitidos
+  velIzq = constrain(velIzq, 0, maxSpeed);
+  velDer = constrain(velDer, 0, maxSpeed);
 
-// Two I2C buses
-TwoWire I2C_MPU = TwoWire(0);
-TwoWire I2C_BMP = TwoWire(1);
+  // Aplica la velocidad a los motores
+  moverMotor(velIzq, velDer);
 
-// Separate I2C buses for MPU-6050 and BMP180 to avoid conflicts
+  // Pequeña pausa para evitar sobrecarga
+  delay(10);
+}
 
-// Gyroscope drift correction
-float gyroZOffset = 0;
-const int calibrationSamples = 100;
-
-// Variables for gyroscope calibration to correct drift
-
-// Server
-AsyncWebServer server(80);
-
-// Asynchronous web server on port 80 for remote monitoring
-
-// Timing
-unsigned long lastLogTime = 0;
-unsigned long lastSensorRead = 0;
-const long logInterval = 100; // Registro cada 100 ms
-const long sensorInterval = 5000; // Sensores cada 5s
-
-// Timing variables for logging movement and sensor data
-
+// Función para calibrar sensores durante 5 segundos
 void calibrarSensores() {
-  // Calibrates infrared sensors by finding min/max values over 5 seconds
-  Serial.println("Calibrando sensores infrarrojos...");
   unsigned long startTime = millis();
   while (millis() - startTime < 5000) {
     int valIzq = analogRead(SENSOR_IZQ);
     int valCen = analogRead(SENSOR_CEN);
     int valDer = analogRead(SENSOR_DER);
-    minIzq = min(minIzq, valIzq);
-    maxIzq = max(maxIzq, valIzq);
-    minCen = min(minCen, valCen);
-    maxCen = max(maxCen, valCen);
-    minDer = min(minDer, valDer);
-    maxDer = max(maxDer, valDer);
+
+    // Actualiza los valores mínimos y máximos detectados
+    if (valIzq < minIzq) minIzq = valIzq;
+    if (valIzq > maxIzq) maxIzq = valIzq;
+
+    if (valCen < minCen) minCen = valCen;
+    if (valCen > maxCen) maxCen = valCen;
+
+    if (valDer < minDer) minDer = valDer;
+    if (valDer > maxDer) maxDer = valDer;
+
+    // Hace girar el robot lentamente para captar el entorno
+    moverMotor(60, 60);
     delay(5);
   }
-  if (maxIzq - minIzq < 100) maxIzq = minIzq + 100;
-  if (maxCen - minCen < 100) maxCen = minCen + 100;
-  if (maxDer - minDer < 100) maxDer = minDer + 100;
-  Serial.print("minIzq: "); Serial.print(minIzq);
-  Serial.print(", maxIzq: "); Serial.print(maxIzq);
-  Serial.print(", minCen: "); Serial.print(minCen);
-  Serial.print(", maxCen: "); Serial.print(maxCen);
-  Serial.print(", minDer: "); Serial.print(minDer);
-  Serial.print(", maxDer: "); Serial.println(maxDer);
-  Serial.println("Calibración completa.");
+  // Detiene el robot después de calibrar
+  moverMotor(0, 0);
 }
 
-void calibrarGiroscopio() {
-  // Calibrates gyroscope by averaging Z-axis readings to correct drift
-  if (!mpuInitialized) return;
-  Serial.println("Calibrando giroscopio...");
-  float sumGyroZ = 0;
-  for (int i = 0; i < calibrationSamples; i++) {
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-    sumGyroZ += g.gyro.z;
-    delay(10);
-  }
-  gyroZOffset = sumGyroZ / calibrationSamples;
-  Serial.print("Offset giroscopio Z: "); Serial.println(gyroZOffset, 4);
-}
-
+// Función para mover los motores con velocidades específicas
 void moverMotor(int velIzq, int velDer) {
-  // Controls motors by setting direction and PWM speed
-  velIzq = constrain(velIzq, -maxSpeed, maxSpeed);
-  velDer = constrain(velDer, -maxSpeed, maxSpeed);
-  digitalWrite(IN1, velIzq >= 0 ? HIGH : LOW);
-  digitalWrite(IN2, velIzq >= 0 ? LOW : HIGH);
-  digitalWrite(IN3, velDer >= 0 ? HIGH : LOW);
-  digitalWrite(IN4, velDer >= 0 ? LOW : HIGH);
-  ledcWrite(pwmChannelA, abs(velIzq));
-  ledcWrite(pwmChannelB, abs(velDer));
-  Serial.print("Vel Izq: "); Serial.print(velIzq);
-  Serial.print(", Vel Der: "); Serial.println(velDer);
-}
+  // Configura dirección hacia adelante en ambos motores
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
 
-void logMovement(String movement) {
-  // Logs movement data to LittleFS and memory, keeping log size manageable
-  unsigned long startTime = micros();
-  File file = LittleFS.open("/movements.txt", "a");
-  if (file) {
-    file.println(movement);
-    file.close();
-  }
-  movementLog += movement + "\n";
-  if (movementLog.length() > 5000) {
-    movementLog = movementLog.substring(movementLog.length() - 5000);
-  }
-  Serial.print("Tiempo escritura LittleFS: "); Serial.print(micros() - startTime); Serial.println(" us");
-}
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
 
-void logSensorData(String data) {
-  // Stores the latest sensor data in memory
-  sensorLog = data;
-}
-
-String escapeJson(String input) {
-  // Escapes special characters for JSON formatting
-  String output = "";
-  for (unsigned int i = 0; i < input.length(); i++) {
-    char c = input[i];
-    switch (c) {
-      case '"': output += "\\\""; break;
-      case '\\': output += "\\\\"; break;
-      case '\n': output += "\\n"; break;
-      case '\r': output += "\\r"; break;
-      case '\t': output += "\\t"; break;
-      default: output += c; break;
-    }
-  }
-  return output;
-}
-
-void setup() {
-  // Initializes serial, file system, sensors, motors, WiFi, and web server
-  Serial.begin(115200);
-  Serial.println("Iniciando...");
-
-  if (!LittleFS.begin()) {
-    Serial.println("Error al montar LittleFS");
-    return;
-  }
-  Serial.println("LittleFS montado correctamente");
-
-  File file = LittleFS.open("/movements.txt", "w");
-  if (file) {
-    file.println("INICIO");
-    file.close();
-  }
-
-  dht.begin();
-  Serial.println("DHT11 inicializado");
-
-  I2C_MPU.begin(MPU_SDA, MPU_SCL, 100000);
-  if (!mpu.begin(0x68, &I2C_MPU)) {
-    Serial.println("No se pudo inicializar MPU-6050");
-    mpuInitialized = false;
-  } else {
-    mpuInitialized = true;
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-    Serial.println("MPU-6050 inicializado");
-    calibrarGiroscopio();
-  }
-
-  I2C_BMP.begin(BMP_SDA, BMP_SCL, 100000);
-  if (!bmp.begin(0, &I2C_BMP)) {
-    Serial.println("No se pudo inicializar BMP180");
-    bmpInitialized = false;
-  } else {
-    bmpInitialized = true;
-    Serial.println("BMP180 inicializado");
-  }
-
-  pinMode(SENSOR_IZQ, INPUT);
-  pinMode(SENSOR_CEN, INPUT);
-  pinMode(SENSOR_DER, INPUT);
-  pinMode(ENA, OUTPUT);
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(ENB, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
-
-  ledcSetup(pwmChannelA, freq, resolution);
-  ledcAttachPin(ENA, pwmChannelA);
-  ledcSetup(pwmChannelB, freq, resolution);
-  ledcAttachPin(ENB, pwmChannelB);
-
-  WiFi.softAP(ssid, password);
-  IPAddress local_IP(192, 168, 1, 120);
-  IPAddress gateway(192, 168, 1, 1);
-  IPAddress subnet(255, 255, 255, 0);
-  WiFi.softAPConfig(local_IP, gateway, subnet);
-  Serial.println("Punto de acceso WiFi creado");
-  Serial.print("IP: "); Serial.println(WiFi.softAPIP());
-
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    // Serves the main webpage
-    request->send(LittleFS, "/index.html", "text/html");
-  });
-
-  server.on("/data", HTTP_GET, [](AsyncWebServerRequest *request) {
-    // Sends sensor and movement data as JSON
-    String json = "{\"movement\":\"" + escapeJson(movementLog) + "\",";
-    unsigned long startTime = micros();
-    float temp = dht.readTemperature();
-    float hum = dht.readHumidity();
-    json += "\"temperature\":" + String(temp, 1) + ",";
-    json += "\"humidity\":" + String(hum, 1) + ",";
-    Serial.print("Tiempo lectura DHT11: "); Serial.print(micros() - startTime); Serial.println(" us");
-    if (bmpInitialized) {
-      startTime = micros();
-      float pressure = bmp.readPressure() / 100.0;
-      json += "\"pressure\":" + String(pressure, 1) + ",";
-      Serial.print("Tiempo lectura BMP180: "); Serial.print(micros() - startTime); Serial.println(" us");
-    } else {
-      json += "\"pressure\":0,";
-    }
-    if (mpuInitialized) {
-      sensors_event_t a, g, temp_mpu;
-      startTime = micros();
-      mpu.getEvent(&a, &g, &temp_mpu);
-      Serial.print("Tiempo lectura MPU-6050: "); Serial.print(micros() - startTime); Serial.println(" us");
-      json += "\"accelX\":" + String(a.acceleration.x, 2) + ",";
-      json += "\"accelY\":" + String(a.acceleration.y, 2) + ",";
-      json += "\"accelZ\":" + String(a.acceleration.z, 2) + ",";
-      json += "\"gyroX\":" + String(g.gyro.x, 2) + ",";
-      json += "\"gyroY\":" + String(g.gyro.y, 2) + ",";
-      json += "\"gyroZ\":" + String(g.gyro.z - gyroZOffset, 2);
-    } else {
-      json += "\"accelX\":0,\"accelY\":0,\"accelZ\":0,\"gyroX\":0,\"gyroY\":0,\"gyroZ\":0";
-    }
-    json += "}";
-    request->send(200, "application/json", json);
-  });
-
-  server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
-    // Allows downloading the movement log file
-    request->send(LittleFS, "/movements.txt", "text/plain", true);
-  });
-
-  server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request) {
-    // Clears logs and resets the movement file
-    movementLog = "INICIO\n";
-    sensorLog = "";
-    File file = LittleFS.open("/movements.txt", "w");
-    if (file) {
-      file.println("INICIO");
-      file.close();
-      request->send(200, "text/plain", "Datos reiniciados");
-    } else {
-      request->send(500, "text/plain", "Error al reiniciar movements.txt");
-    }
-  });
-
-  server.begin();
-  Serial.println("Servidor iniciado");
-
-  calibrarSensores();
-  Serial.println("Setup completo");
-}
-
-void loop() {
-  // Main loop: reads sensors, applies PID control, logs data, and controls motors
-  unsigned long startLoop = micros();
-
-  // Read infrared sensors
-  int valIzq = analogRead(SENSOR_IZQ);
-  int valCen = analogRead(SENSOR_CEN);
-  int valDer = analogRead(SENSOR_DER);
-
-  // Apply moving average filter
-  izqBuffer[bufferIndex] = valIzq;
-  cenBuffer[bufferIndex] = valCen;
-  derBuffer[bufferIndex] = valDer;
-  bufferIndex = (bufferIndex + 1) % filterSize;
-
-  long sumIzq = 0, sumCen = 0, sumDer = 0;
-  for (int i = 0; i < filterSize; i++) {
-    sumIzq += izqBuffer[i];
-    sumCen += cenBuffer[i];
-    sumDer += derBuffer[i];
-  }
-  valIzq = sumIzq / filterSize;
-  valCen = sumCen / filterSize;
-  valDer = sumDer / filterSize;
-
-  // Normalize sensor values
-  int normIzq = map(valIzq, minIzq, maxIzq, 1000, 0);
-  int normCen = map(valCen, minCen, maxCen, 1000, 0);
-  int normDer = map(valDer, minDer, maxDer, 1000, 0);
-
-  // PID control for line following
-  float error = normDer - normIzq;
-  integral += error;
-  if (abs(integral) > 1000) integral = 0;
-  float derivative = error - lastError;
-  float correction = Kp * error + Ki * integral + Kd * derivative;
-  lastError = error;
-
-  int velIzq = baseSpeed - correction;
-  int velDer = baseSpeed + correction;
-  velIzq = constrain(velIzq, 0, maxSpeed);
-  velDer = constrain(velDer, 0, maxSpeed);
-
-  // Read gyroscope for angle tracking
-  unsigned long currentTime = millis();
-  float gyroZ = 0;
-  if (mpuInitialized) {
-    sensors_event_t a, g, temp_mpu;
-    mpu.getEvent(&a, &g, &temp_mpu);
-    gyroZ = (g.gyro.z - gyroZOffset) * 3;
-  }
-
-  // Calculate distance and angle change
-  float timeDelta = (currentTime - lastLogTime) / 1000.0;
-  float distance = baseSpeed * timeDelta * 0.03;
-  float angleChange = gyroZ * timeDelta;
-
-  // Log movement data every 100ms
-  if (currentTime - lastLogTime >= logInterval) {
-    String movement = "MOVE:DIST:" + String(distance, 2) + ",ANGLE:" + String(angleChange, 2);
-    logMovement(movement);
-    Serial.println("--- Estado ---");
-    Serial.print("Raw Izq: "); Serial.print(valIzq);
-    Serial.print(" | Raw Cen: "); Serial.print(valCen);
-    Serial.print(" | Raw Der: "); Serial.println(valDer);
-    Serial.print("Norm Izq: "); Serial.print(normIzq);
-    Serial.print(" | Norm Cen: "); Serial.print(normCen);
-    Serial.print(" | Norm Der: "); Serial.println(normDer);
-    Serial.print("Error: "); Serial.print(error);
-    Serial.print(" | Correction: "); Serial.println(correction);
-    Serial.print("Vel Izq: "); Serial.print(velIzq);
-    Serial.print(" | Vel Der: "); Serial.println(velDer);
-    Serial.print("Distancia: "); Serial.print(distance); Serial.print(" cm");
-    Serial.print(" | GyroZ: "); Serial.print(gyroZ, 4); Serial.print(" rad/s");
-    Serial.print(" | AngleChange: "); Serial.print(angleChange, 4); Serial.println(" rad");
-    lastLogTime = currentTime;
-  }
-
-  // Log sensor data every 5 seconds
-  if (currentTime - lastSensorRead >= sensorInterval) {
-    float temp = dht.readTemperature();
-    float hum = dht.readHumidity();
-    float pressure = bmpInitialized ? bmp.readPressure() / 100.0 : 0;
-    String sensorData = "TEMP:" + String(temp, 1) + ",HUM:" + String(hum, 1) + ",PRES:" + String(pressure, 1);
-    if (mpuInitialized) {
-      sensors_event_t a, g, temp_mpu;
-      mpu.getEvent(&a, &g, &temp_mpu);
-      sensorData += ",ACCX:" + String(a.acceleration.x, 2) + 
-                    ",ACCY:" + String(a.acceleration.y, 2) + 
-                    ",ACCZ:" + String(a.acceleration.z, 2) + 
-                    ",GYRX:" + String(g.gyro.x, 2) + 
-                    ",GYRY:" + String(g.gyro.y, 2) + 
-                    ",GYRZ:" + String(g.gyro.z - gyroZOffset, 2);
-    } else {
-      sensorData += ",ACCX:0,ACCY:0,ACCZ:0,GYRX:0,GYRY:0,GYRZ:0";
-    }
-    logSensorData(sensorData);
-    lastSensorRead = currentTime;
-  }
-
-  // Apply motor speeds
-  moverMotor(velIzq, velDer);
-
-  // Log loop execution time
-  Serial.print("Tiempo loop: "); Serial.print(micros() - startLoop); Serial.println(" us");
+  // Aplica velocidad con PWM
+  ledcWrite(CH_A, velIzq);
+  ledcWrite(CH_B, velDer);
 }
